@@ -1,0 +1,121 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = []
+  output          = "../src/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  farmer
+  buyer
+  seller
+  admin
+}
+
+enum Status {
+  active
+  suspended
+}
+
+enum AlertSeverity {
+  info
+  warning
+  critical
+}
+
+enum CropType {
+  Maize
+  Cassava
+  Tomato
+  Pepper
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  phone     String?
+  password  String
+  role      Role
+  status    Status   @default(active)
+  location  String?
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  farmer Farmer?
+  buyer  Buyer?
+  seller Seller?
+}
+
+model Farmer {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fields Field[]
+}
+
+model Field {
+  id             String    @id @default(cuid())
+  farmerId       String
+  farmer         Farmer    @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  location       String
+  crop           CropType
+  area           Float
+  ndvi           Float     @default(0)
+  soilMoisture   Float     @default(0)
+  lastIrrigation DateTime?
+  status         Status    @default(active)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  alerts Alert[]
+}
+
+model Buyer {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Seller {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Alert {
+  id         String        @id @default(cuid())
+  fieldId    String
+  field      Field         @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  type       String
+  severity   AlertSeverity
+  resolved   Boolean       @default(false)
+  resolvedAt DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+}
+
+model ContentImage {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  label       String
+  description String
+  page        String
+  imageUrl    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
