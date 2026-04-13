@@ -13,32 +13,27 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Allow requests with no origin (mobile apps, curl, Thunder Client)
-      if (!origin) return callback(null, true);
+app.use(cors({
+  origin: function(origin, callback) {
+    if (!origin) return callback(null, true)
+    if (origin.startsWith('http://localhost:')) return callback(null, true)
 
-      // Allow any localhost port during development
-      if (origin.startsWith("http://localhost:")) {
-        return callback(null, true);
-      }
+    const allowedOrigins = [
+      'https://ai-driven-agricultural-platform.vercel.app',
+      process.env.FARMER_APP_URL,
+      process.env.ADMIN_URL,
+    ].filter(Boolean)
 
-      // In production, restrict to your actual domains
-      const allowedOrigins = [
-        process.env.FARMER_APP_URL || "http://localhost:5179",
-        process.env.ADMIN_URL || "http://localhost:5174",
-      ];
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true)
+    } else {
+      console.log('CORS blocked:', origin)
+      callback(new Error('Not allowed by CORS'))
+    }
+  },
+  credentials: true,
+}))
 
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-  }),
-);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
