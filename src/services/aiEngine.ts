@@ -1,21 +1,12 @@
 // src/services/aiEngine.ts
-// AgroFlow+ AI Engine
-// Layer 1 → Rule-based deterministic logic
-// Layer 2 → Gemini API called with controlled prompt
+// STRATEGY: Rule Engine = REAL Intelligence | Groq = ONLY Explanation
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import Groq from 'groq-sdk';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type CropType = "Maize" | "Cassava" | "Tomato" | "Pepper";
 export type SoilType = "loamy" | "sandy" | "clay" | "silty" | "unknown";
-export type Intent =
-  | "harvest_prediction"
-  | "soil_check"
-  | "crop_guidance"
-  | "irrigation_advice"
-  | "pest_alert"
-  | "general";
 
 export interface AIInput {
   message: string;
@@ -30,7 +21,6 @@ export interface AIInput {
 }
 
 export interface RuleResult {
-  intent: Intent;
   crop: CropType | null;
   harvestDate: string | null;
   daysToHarvest: number | null;
@@ -44,21 +34,18 @@ export interface RuleResult {
 export interface AIResponse {
   ruleResult: RuleResult;
   aiText: string;
-  source: "gemini" | "fallback";
+  source: "groq" | "fallback";
 }
 
-// ── Crop Knowledge Base ───────────────────────────────────────────────────────
+// ── CROP KNOWLEDGE BASE (YOUR REAL INTELLIGENCE) ─────────────────────────────
 
-const CROP_DATA: Record<
-  CropType,
-  {
-    growthDays: number;
-    bestSoils: SoilType[];
-    waterInterval: number;
-    stages: { name: string; startPct: number }[];
-    pests: string[];
-  }
-> = {
+const CROP_DATA: Record<CropType, {
+  growthDays: number;
+  bestSoils: SoilType[];
+  waterInterval: number;
+  stages: { name: string; startPct: number }[];
+  pests: string[];
+}> = {
   Maize: {
     growthDays: 90,
     bestSoils: ["loamy", "silty"],
@@ -113,59 +100,13 @@ const CROP_DATA: Record<
 };
 
 const SOIL_RATINGS: Record<CropType, Record<SoilType, string>> = {
-  Maize: {
-    loamy: "Excellent",
-    silty: "Good",
-    sandy: "Fair",
-    clay: "Poor",
-    unknown: "Unknown",
-  },
-  Cassava: {
-    loamy: "Excellent",
-    sandy: "Good",
-    silty: "Fair",
-    clay: "Poor",
-    unknown: "Unknown",
-  },
-  Tomato: {
-    loamy: "Excellent",
-    sandy: "Good",
-    silty: "Good",
-    clay: "Fair",
-    unknown: "Unknown",
-  },
-  Pepper: {
-    loamy: "Excellent",
-    silty: "Good",
-    sandy: "Fair",
-    clay: "Poor",
-    unknown: "Unknown",
-  },
+  Maize: { loamy: "Excellent", silty: "Good", sandy: "Fair", clay: "Poor", unknown: "Unknown" },
+  Cassava: { loamy: "Excellent", sandy: "Good", silty: "Fair", clay: "Poor", unknown: "Unknown" },
+  Tomato: { loamy: "Excellent", sandy: "Good", silty: "Good", clay: "Fair", unknown: "Unknown" },
+  Pepper: { loamy: "Excellent", silty: "Good", sandy: "Fair", clay: "Poor", unknown: "Unknown" },
 };
 
-export const ALLOWED_CROPS: CropType[] = ["Maize", "Cassava", "Tomato", "Pepper"];
-
-const AGRI_KEYWORDS = [
-  "crop", "farm", "soil", "harvest", "plant", "grow", "water", "irrigat",
-  "fertiliz", "pest", "disease", "yield", "field", "seed", "rain", "weather",
-  "maize", "corn", "cassava", "tomato", "pepper", "ndvi", "moisture", "spray",
-  "weed", "compost", "nitrogen", "potassium", "phosphorus", "deliver", "sell", "buy",
-];
-
-function detectIntent(message: string): Intent {
-  const m = message.toLowerCase();
-  if (/harvest|when.*(ready|pick)|days? (left|remain)|maturity/.test(m))
-    return "harvest_prediction";
-  if (/soil|loam|clay|sand|silt|nitrogen|nutrient|ph/.test(m))
-    return "soil_check";
-  if (/water|irrigat|moisture|dry|drip/.test(m)) 
-    return "irrigation_advice";
-  if (/pest|disease|insect|worm|blight|mosaic|mite|weevil|fungus/.test(m))
-    return "pest_alert";
-  if (/guid|advice|tip|how|what|best|recommend|plan|stage/.test(m))
-    return "crop_guidance";
-  return "general";
-}
+// ── Helper Functions ─────────────────────────────────────────────────────────
 
 function detectCropFromMessage(message: string): CropType | null {
   const m = message.toLowerCase();
@@ -176,17 +117,15 @@ function detectCropFromMessage(message: string): CropType | null {
   return null;
 }
 
-export function isAgricultureRelated(message: string): boolean {
-  const m = message.toLowerCase();
-  return AGRI_KEYWORDS.some((kw) => m.includes(kw));
+export function isGreeting(message: string): boolean {
+  const m = message.toLowerCase().trim();
+  const greetings = ["hi", "hello", "hey", "good morning", "good afternoon", "good evening", "howdy"];
+  return greetings.includes(m) || greetings.some(g => m.startsWith(g));
 }
 
-export function isAllowedCrop(crop: string): crop is CropType {
-  return ALLOWED_CROPS.includes(crop as CropType);
-}
+// ── RULE ENGINE (YOUR REAL INTELLIGENCE - DOES ALL THE CALCULATIONS) ─────────
 
 export function runRuleEngine(input: AIInput): RuleResult {
-  const intent = detectIntent(input.message);
   const crop = input.crop ?? detectCropFromMessage(input.message);
   const riskFlags: string[] = [];
 
@@ -200,95 +139,65 @@ export function runRuleEngine(input: AIInput): RuleResult {
   if (crop && CROP_DATA[crop]) {
     const data = CROP_DATA[crop];
 
+    // 1. Calculate harvest date and growth stage
     if (input.plantingDate) {
       const planted = new Date(input.plantingDate);
       const harvest = new Date(planted);
       harvest.setDate(harvest.getDate() + data.growthDays);
       harvestDate = harvest.toISOString().split("T")[0];
       const today = new Date();
-      daysToHarvest = Math.ceil(
-        (harvest.getTime() - today.getTime()) / 86_400_000,
-      );
+      daysToHarvest = Math.ceil((harvest.getTime() - today.getTime()) / 86_400_000);
 
-      const elapsedDays = Math.ceil(
-        (today.getTime() - planted.getTime()) / 86_400_000,
-      );
-      const growthPct = Math.min(
-        100,
-        Math.round((elapsedDays / data.growthDays) * 100),
-      );
-      const stage = [...data.stages]
-        .reverse()
-        .find((s) => growthPct >= s.startPct);
-      growthStage = stage
-        ? `${stage.name} (${growthPct}% complete)`
-        : "Germination";
+      const elapsedDays = Math.ceil((today.getTime() - planted.getTime()) / 86_400_000);
+      const growthPct = Math.min(100, Math.round((elapsedDays / data.growthDays) * 100));
+      const stage = [...data.stages].reverse().find((s) => growthPct >= s.startPct);
+      growthStage = stage ? `${stage.name} (${growthPct}% complete)` : "Germination";
     }
 
+    // 2. Check soil suitability
     if (input.soilType && input.soilType !== "unknown") {
       soilSuitability = SOIL_RATINGS[crop][input.soilType] ?? "Unknown";
       if (soilSuitability === "Poor") {
-        riskFlags.push(
-          `${input.soilType} soil is not ideal for ${crop} — consider soil amendment`,
-        );
+        riskFlags.push(`${input.soilType} soil is not ideal for ${crop}`);
       }
     }
 
+    // 3. Check irrigation needs
     if (input.lastIrrigation) {
       const lastWatered = new Date(input.lastIrrigation);
-      const daysSince = Math.ceil(
-        (Date.now() - lastWatered.getTime()) / 86_400_000,
-      );
+      const daysSince = Math.ceil((Date.now() - lastWatered.getTime()) / 86_400_000);
       if (daysSince >= data.waterInterval) {
         irrigationDue = true;
-        riskFlags.push(
-          `Irrigation overdue — last watered ${daysSince} days ago (recommended every ${data.waterInterval} days)`,
-        );
+        riskFlags.push(`Irrigation needed - ${daysSince} days since last watering`);
       }
     }
 
-    if (input.ndvi !== undefined) {
-      if (input.ndvi < 0.3) {
-        riskFlags.push(
-          `Low NDVI (${input.ndvi.toFixed(2)}) — crop may be stressed or unhealthy`,
-        );
-      }
+    // 4. Check soil moisture
+    if (input.soilMoisture !== undefined && input.soilMoisture < 20) {
+      riskFlags.push(`Very low soil moisture (${input.soilMoisture}%) - water immediately`);
+      irrigationDue = true;
     }
 
-    if (input.soilMoisture !== undefined) {
-      if (input.soilMoisture < 20) {
-        riskFlags.push(
-          `Very low soil moisture (${input.soilMoisture}%) — urgent irrigation needed`,
-        );
-        irrigationDue = true;
-      } else if (input.soilMoisture > 80) {
-        riskFlags.push(
-          `High soil moisture (${input.soilMoisture}%) — risk of waterlogging`,
-        );
-      }
+    // 5. Check NDVI (crop health)
+    if (input.ndvi !== undefined && input.ndvi < 0.3) {
+      riskFlags.push(`Crop health is low (NDVI: ${input.ndvi}) - check for pests/disease`);
     }
 
-    if (intent === "pest_alert") {
-      riskFlags.push(`Common pests for ${crop}: ${data.pests.join(", ")}`);
-    }
-
+    // Build summary
     summary = `Crop: ${crop}`;
     if (growthStage) summary += ` | Stage: ${growthStage}`;
-    if (harvestDate) summary += ` | Est. Harvest: ${harvestDate}`;
-    if (daysToHarvest !== null) {
-      summary +=
-        daysToHarvest > 0
-          ? ` (${daysToHarvest} days away)`
-          : ` (ready to harvest!)`;
-    }
+    if (daysToHarvest !== null && daysToHarvest > 0) summary += ` | ${daysToHarvest} days to harvest`;
+    if (daysToHarvest !== null && daysToHarvest <= 0) summary += ` | READY TO HARVEST!`;
     if (soilSuitability) summary += ` | Soil: ${soilSuitability}`;
-    if (irrigationDue) summary += ` | ⚠ Irrigation due`;
+    if (irrigationDue) summary += ` | ⚠ Needs water`;
+    
+  } else if (crop) {
+    summary = `Crop: ${crop}`;
   } else {
-    summary = "General agricultural query";
+    summary = "General farming question";
   }
 
   return {
-    intent,
     crop,
     harvestDate,
     daysToHarvest,
@@ -300,96 +209,127 @@ export function runRuleEngine(input: AIInput): RuleResult {
   };
 }
 
-function buildPrompt(input: AIInput, rule: RuleResult): string {
-  const riskSection =
-    rule.riskFlags.length > 0
-      ? `Risk Flags Detected:\n${rule.riskFlags.map((r) => `- ${r}`).join("\n")}`
-      : "No major risks detected.";
+// ── BUILD PROMPT FOR GROQ (AI ONLY EXPLAINS, DOESN'T DECIDE) ─────────────────
 
-  return `You are AgroFlow AI, an expert agricultural assistant for Nigerian farmers.
-You ONLY answer questions about farming, crops, soil, irrigation, pests, and harvesting.
-If the question is not agriculture-related, respond: "I can only assist with agricultural topics."
+function buildExplanationPrompt(input: AIInput, rule: RuleResult): string {
+  return `You are AgroFlow AI - a friendly farming assistant for Nigerian farmers.
 
-Farmer: ${input.farmerName ?? "Farmer"}
-Location: ${input.location ?? "Nigeria"}
-Crop: ${rule.crop ?? "Not specified"}
-User Question: "${input.message}"
+IMPORTANT: The calculations below are ACCURATE and MUST be used as facts. Do not change them.
 
---- System Analysis (use this to guide your response) ---
-Intent Detected: ${rule.intent}
-Growth Stage: ${rule.growthStage ?? "Unknown"}
-Estimated Harvest Date: ${rule.harvestDate ?? "Not calculated"}
-Days to Harvest: ${rule.daysToHarvest !== null ? rule.daysToHarvest + " days" : "N/A"}
-Soil Suitability: ${rule.soilSuitability ?? "Not assessed"}
-Irrigation Due: ${rule.irrigationDue ? "YES — action needed" : "No"}
-${riskSection}
----
+SYSTEM CALCULATIONS (These are the FACTS):
 
-Instructions:
-- Use the system analysis above as the basis of your answer
-- Give practical, specific advice relevant to Nigerian farming conditions
-- Use simple, clear language the farmer can act on immediately
-- Structure your response with line breaks for readability
-- Keep response focused and under 200 words
-- Do NOT contradict the system analysis data above
-- Do NOT discuss topics outside agriculture`;
+${rule.summary}
+
+${rule.riskFlags.length > 0 ? `⚠️ RISKS DETECTED:\n${rule.riskFlags.map(f => `- ${f}`).join('\n')}\n` : ''}
+
+Farmer asked: "${input.message}"
+
+YOUR JOB:
+Explain these calculations in simple, helpful language. Give practical advice a farmer can use immediately.
+
+Keep response under 150 words. Be encouraging and specific to Nigerian farming conditions.`;
 }
 
-async function callGemini(prompt: string): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY not set in environment");
+// ── GROQ CLIENT (ONLY FOR EXPLANATION) ──────────────────────────────────────
 
-  console.log("🔵 Initializing Gemini with model: gemini-2.5-flash");
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+let groq: any = null;
 
-  console.log("🟡 Sending request to Gemini...");
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
-  
-  console.log("📝 Raw Gemini response length:", text.length);
-  console.log("📝 Response preview:", text.substring(0, 150) + "...");
-  
-  const blockedPatterns = [
-    /ignore (previous|above|system)/i,
-    /you are now/i,
-    /act as/i,
-    /jailbreak/i,
-  ];
-  if (blockedPatterns.some((p) => p.test(text))) {
-    console.log("⚠️ Response blocked by safety filter");
-    return "I can only assist with agricultural topics related to your crops and farm.";
+function getGroqClient() {
+  if (!groq && process.env.GROQ_API_KEY) {
+    groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  }
+  return groq;
+}
+
+async function callGroq(prompt: string): Promise<string> {
+  const client = getGroqClient();
+  if (!client) {
+    throw new Error("GROQ_API_KEY not set");
   }
 
-  return text.trim();
+  const completion = await client.chat.completions.create({
+    messages: [{ role: "user", content: prompt }],
+    model: "llama-3.3-70b-versatile",
+    temperature: 0.7,
+    max_tokens: 500,
+  });
+
+  return completion.choices[0]?.message?.content || "";
 }
+
+// ── FALLBACK (WHEN GROQ FAILS - STILL USES RULE RESULTS) ─────────────────────
+
+function getFallbackResponse(rule: RuleResult): string {
+  const crop = rule.crop || "your crop";
+  
+  let response = `🌱 **${crop} Status Report**\n\n`;
+  
+  if (rule.daysToHarvest !== null) {
+    if (rule.daysToHarvest > 0) {
+      response += `📅 **Harvest:** ${rule.daysToHarvest} days remaining\n\n`;
+    } else {
+      response += `🎉 **Harvest:** Ready to harvest NOW!\n\n`;
+    }
+  }
+  
+  if (rule.growthStage) {
+    response += `🌿 **Growth Stage:** ${rule.growthStage}\n\n`;
+  }
+  
+  if (rule.soilSuitability) {
+    response += `🌍 **Soil:** ${rule.soilSuitability}`;
+    if (rule.soilSuitability === "Poor") {
+      response += ` - Add compost and fertilizer to improve`;
+    }
+    response += `\n\n`;
+  }
+  
+  if (rule.irrigationDue) {
+    response += `💧 **Watering Needed:** Your crop needs irrigation now!\n\n`;
+  }
+  
+  if (rule.riskFlags.length > 0) {
+    response += `⚠️ **Alerts:**\n`;
+    rule.riskFlags.forEach(flag => {
+      response += `• ${flag}\n`;
+    });
+    response += `\n`;
+  }
+  
+  response += `💡 **Tip:** Monitor your ${crop} regularly for best results.`;
+  
+  return response;
+}
+
+// ── MAIN EXPORT (RULE ENGINE + OPTIONAL AI EXPLANATION) ──────────────────────
 
 export async function processAIRequest(input: AIInput): Promise<AIResponse> {
-  console.log("\n🟣 PROCESSING AI REQUEST");
-  console.log("User message:", input.message);
+  console.log("\n🔍 STEP 1: Running Rule Engine...");
+  console.log(`   Message: "${input.message.substring(0, 50)}"`);
   
+  // REMOVE or COMMENT OUT any greeting/thank you handling here
+  // Let the controller handle all greetings and thank yous
+  
+  // STEP 1: Run Rule Engine (YOUR REAL INTELLIGENCE)
   const ruleResult = runRuleEngine(input);
-  const prompt = buildPrompt(input, ruleResult);
-
+  console.log(`   ✅ Rule Result: ${ruleResult.summary}`);
+  
+  // STEP 2: Try AI for explanation only (if available)
   let aiText: string;
-  let source: "gemini" | "fallback";
-
+  let source: "groq" | "fallback";
+  
   try {
-    aiText = await callGemini(prompt);
-    source = "gemini";
-    console.log("✅ Gemini SUCCESS! Returning AI response of length:", aiText.length);
+    console.log("🤖 STEP 2: Getting AI explanation from Groq...");
+    const prompt = buildExplanationPrompt(input, ruleResult);
+    aiText = await callGroq(prompt);
+    source = "groq";
+    console.log(`   ✅ AI explanation generated`);
   } catch (err: any) {
-    console.error("🔴 Gemini API error:", err?.message);
-    aiText = `Based on my analysis:\n\n${ruleResult.summary}`;
-    if (ruleResult.riskFlags.length > 0) {
-      aiText += "\n\n⚠️ Alerts:\n" + ruleResult.riskFlags.map(r => `• ${r}`).join("\n");
-    }
+    console.log(`   ⚠️ AI unavailable, using fallback`);
+    aiText = getFallbackResponse(ruleResult);
     source = "fallback";
-    console.log("⚠️ Using FALLBACK response");
   }
-
-  console.log("📤 Returning response. Source:", source);
-  console.log("📤 Response preview:", aiText.substring(0, 150) + "...\n");
   
   return { ruleResult, aiText, source };
 }
+
