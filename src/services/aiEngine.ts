@@ -401,23 +401,44 @@ async function callGemini(prompt: string): Promise<string> {
   if (!apiKey) throw new Error("GEMINI_API_KEY not set in environment");
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
-
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
-
-  // ── Output Safety Filter ──
-  const blockedPatterns = [
-    /ignore (previous|above|system)/i,
-    /you are now/i,
-    /act as/i,
-    /jailbreak/i,
+  
+  // Models that actually work (from your list)
+  const modelsToTry = [
+    'gemini-2.5-flash',
+    'gemini-2.0-flash', 
+    'gemini-flash-latest',
+    'gemini-pro-latest'
   ];
-  if (blockedPatterns.some((p) => p.test(text))) {
-    return "I can only assist with agricultural topics related to your crops and farm.";
+  
+  let lastError: Error | null = null;
+  
+  for (const modelName of modelsToTry) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      
+      // Output Safety Filter
+      const blockedPatterns = [
+        /ignore (previous|above|system)/i,
+        /you are now/i,
+        /act as/i,
+        /jailbreak/i,
+      ];
+      if (blockedPatterns.some((p) => p.test(text))) {
+        return "I can only assist with agricultural topics related to your crops and farm.";
+      }
+      
+      console.log(`✅ Gemini using model: ${modelName}`);
+      return text.trim();
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`Model ${modelName} failed:`, err.message);
+      continue;
+    }
   }
-
-  return text.trim();
+  
+  throw lastError || new Error("All Gemini models failed");
 }
 
 // ── MAIN EXPORT: Full AI Pipeline ─────────────────────────────────────────────
