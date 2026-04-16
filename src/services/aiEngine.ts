@@ -1,9 +1,7 @@
 // src/services/aiEngine.ts
-// ─────────────────────────────────────────────────────────────────────────────
 // AgroFlow+ AI Engine
-// Layer 1 → Rule-based deterministic logic  (YOUR intelligence)
-// Layer 2 → Gemini API called with controlled prompt (AI assistant)
-// ─────────────────────────────────────────────────────────────────────────────
+// Layer 1 → Rule-based deterministic logic
+// Layer 2 → Gemini API called with controlled prompt
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
@@ -23,11 +21,11 @@ export interface AIInput {
   message: string;
   crop?: CropType;
   soilType?: SoilType;
-  plantingDate?: string; // ISO date string e.g. "2026-01-15"
+  plantingDate?: string;
   location?: string;
-  soilMoisture?: number; // 0–100 from Field.soilMoisture
-  ndvi?: number; // 0–1   from Field.ndvi
-  lastIrrigation?: string | null; // ISO date string
+  soilMoisture?: number;
+  ndvi?: number;
+  lastIrrigation?: string | null;
   farmerName?: string;
 }
 
@@ -56,7 +54,7 @@ const CROP_DATA: Record<
   {
     growthDays: number;
     bestSoils: SoilType[];
-    waterInterval: number; // days between irrigation
+    waterInterval: number;
     stages: { name: string; startPct: number }[];
     pests: string[];
   }
@@ -75,7 +73,7 @@ const CROP_DATA: Record<
     pests: ["Fall Armyworm", "Maize Weevil", "Aphids"],
   },
   Cassava: {
-    growthDays: 540, // 18 months
+    growthDays: 540,
     bestSoils: ["loamy", "sandy"],
     waterInterval: 14,
     stages: [
@@ -114,8 +112,6 @@ const CROP_DATA: Record<
   },
 };
 
-// ── Soil Suitability Map ──────────────────────────────────────────────────────
-
 const SOIL_RATINGS: Record<CropType, Record<SoilType, string>> = {
   Maize: {
     loamy: "Excellent",
@@ -147,52 +143,14 @@ const SOIL_RATINGS: Record<CropType, Record<SoilType, string>> = {
   },
 };
 
-// ── Allowed Crops & Keywords ──────────────────────────────────────────────────
-
-export const ALLOWED_CROPS: CropType[] = [
-  "Maize",
-  "Cassava",
-  "Tomato",
-  "Pepper",
-];
+export const ALLOWED_CROPS: CropType[] = ["Maize", "Cassava", "Tomato", "Pepper"];
 
 const AGRI_KEYWORDS = [
-  "crop",
-  "farm",
-  "soil",
-  "harvest",
-  "plant",
-  "grow",
-  "water",
-  "irrigat",
-  "fertiliz",
-  "pest",
-  "disease",
-  "yield",
-  "field",
-  "seed",
-  "rain",
-  "weather",
-  "maize",
-  "corn",
-  "cassava",
-  "tomato",
-  "pepper",
-  "ndvi",
-  "moisture",
-  "spray",
-  "weed",
-  "compost",
-  "nitrogen",
-  "potassium",
-  "phosphorus",
-  "harvest",
-  "deliver",
-  "sell",
-  "buy",
+  "crop", "farm", "soil", "harvest", "plant", "grow", "water", "irrigat",
+  "fertiliz", "pest", "disease", "yield", "field", "seed", "rain", "weather",
+  "maize", "corn", "cassava", "tomato", "pepper", "ndvi", "moisture", "spray",
+  "weed", "compost", "nitrogen", "potassium", "phosphorus", "deliver", "sell", "buy",
 ];
-
-// ── Helper: Detect Intent ─────────────────────────────────────────────────────
 
 function detectIntent(message: string): Intent {
   const m = message.toLowerCase();
@@ -200,15 +158,14 @@ function detectIntent(message: string): Intent {
     return "harvest_prediction";
   if (/soil|loam|clay|sand|silt|nitrogen|nutrient|ph/.test(m))
     return "soil_check";
-  if (/water|irrigat|moisture|dry|drip/.test(m)) return "irrigation_advice";
+  if (/water|irrigat|moisture|dry|drip/.test(m)) 
+    return "irrigation_advice";
   if (/pest|disease|insect|worm|blight|mosaic|mite|weevil|fungus/.test(m))
     return "pest_alert";
   if (/guid|advice|tip|how|what|best|recommend|plan|stage/.test(m))
     return "crop_guidance";
   return "general";
 }
-
-// ── Helper: Detect Crop from Message ─────────────────────────────────────────
 
 function detectCropFromMessage(message: string): CropType | null {
   const m = message.toLowerCase();
@@ -219,20 +176,14 @@ function detectCropFromMessage(message: string): CropType | null {
   return null;
 }
 
-// ── Helper: Check Agriculture Relevance ──────────────────────────────────────
-
 export function isAgricultureRelated(message: string): boolean {
   const m = message.toLowerCase();
   return AGRI_KEYWORDS.some((kw) => m.includes(kw));
 }
 
-// ── Helper: Validate Crop ─────────────────────────────────────────────────────
-
 export function isAllowedCrop(crop: string): crop is CropType {
   return ALLOWED_CROPS.includes(crop as CropType);
 }
-
-// ── LAYER 1: Rule-Based Engine ────────────────────────────────────────────────
 
 export function runRuleEngine(input: AIInput): RuleResult {
   const intent = detectIntent(input.message);
@@ -249,7 +200,6 @@ export function runRuleEngine(input: AIInput): RuleResult {
   if (crop && CROP_DATA[crop]) {
     const data = CROP_DATA[crop];
 
-    // ── Harvest Prediction ──
     if (input.plantingDate) {
       const planted = new Date(input.plantingDate);
       const harvest = new Date(planted);
@@ -260,7 +210,6 @@ export function runRuleEngine(input: AIInput): RuleResult {
         (harvest.getTime() - today.getTime()) / 86_400_000,
       );
 
-      // ── Growth Stage ──
       const elapsedDays = Math.ceil(
         (today.getTime() - planted.getTime()) / 86_400_000,
       );
@@ -276,7 +225,6 @@ export function runRuleEngine(input: AIInput): RuleResult {
         : "Germination";
     }
 
-    // ── Soil Suitability ──
     if (input.soilType && input.soilType !== "unknown") {
       soilSuitability = SOIL_RATINGS[crop][input.soilType] ?? "Unknown";
       if (soilSuitability === "Poor") {
@@ -286,7 +234,6 @@ export function runRuleEngine(input: AIInput): RuleResult {
       }
     }
 
-    // ── Irrigation Check ──
     if (input.lastIrrigation) {
       const lastWatered = new Date(input.lastIrrigation);
       const daysSince = Math.ceil(
@@ -300,7 +247,6 @@ export function runRuleEngine(input: AIInput): RuleResult {
       }
     }
 
-    // ── NDVI Risk ──
     if (input.ndvi !== undefined) {
       if (input.ndvi < 0.3) {
         riskFlags.push(
@@ -309,7 +255,6 @@ export function runRuleEngine(input: AIInput): RuleResult {
       }
     }
 
-    // ── Soil Moisture Risk ──
     if (input.soilMoisture !== undefined) {
       if (input.soilMoisture < 20) {
         riskFlags.push(
@@ -323,12 +268,10 @@ export function runRuleEngine(input: AIInput): RuleResult {
       }
     }
 
-    // ── Pest Risk Mention ──
     if (intent === "pest_alert") {
       riskFlags.push(`Common pests for ${crop}: ${data.pests.join(", ")}`);
     }
 
-    // ── Build Summary ──
     summary = `Crop: ${crop}`;
     if (growthStage) summary += ` | Stage: ${growthStage}`;
     if (harvestDate) summary += ` | Est. Harvest: ${harvestDate}`;
@@ -356,8 +299,6 @@ export function runRuleEngine(input: AIInput): RuleResult {
     summary,
   };
 }
-
-// ── LAYER 2: Build Controlled Gemini Prompt ───────────────────────────────────
 
 function buildPrompt(input: AIInput, rule: RuleResult): string {
   const riskSection =
@@ -394,79 +335,61 @@ Instructions:
 - Do NOT discuss topics outside agriculture`;
 }
 
-// ── LAYER 3: Call Gemini API ──────────────────────────────────────────────────
-
 async function callGemini(prompt: string): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not set in environment");
 
+  console.log("🔵 Initializing Gemini with model: gemini-2.5-flash");
   const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+
+  console.log("🟡 Sending request to Gemini...");
+  const result = await model.generateContent(prompt);
+  const text = result.response.text();
   
-  // Models that actually work (from your list)
-  const modelsToTry = [
-    'gemini-2.5-flash',
-    'gemini-2.0-flash', 
-    'gemini-flash-latest',
-    'gemini-pro-latest'
+  console.log("📝 Raw Gemini response length:", text.length);
+  console.log("📝 Response preview:", text.substring(0, 150) + "...");
+  
+  const blockedPatterns = [
+    /ignore (previous|above|system)/i,
+    /you are now/i,
+    /act as/i,
+    /jailbreak/i,
   ];
-  
-  let lastError: Error | null = null;
-  
-  for (const modelName of modelsToTry) {
-    try {
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
-      
-      // Output Safety Filter
-      const blockedPatterns = [
-        /ignore (previous|above|system)/i,
-        /you are now/i,
-        /act as/i,
-        /jailbreak/i,
-      ];
-      if (blockedPatterns.some((p) => p.test(text))) {
-        return "I can only assist with agricultural topics related to your crops and farm.";
-      }
-      
-      console.log(`✅ Gemini using model: ${modelName}`);
-      return text.trim();
-    } catch (err: any) {
-      lastError = err;
-      console.warn(`Model ${modelName} failed:`, err.message);
-      continue;
-    }
+  if (blockedPatterns.some((p) => p.test(text))) {
+    console.log("⚠️ Response blocked by safety filter");
+    return "I can only assist with agricultural topics related to your crops and farm.";
   }
-  
-  throw lastError || new Error("All Gemini models failed");
+
+  return text.trim();
 }
 
-// ── MAIN EXPORT: Full AI Pipeline ─────────────────────────────────────────────
-
 export async function processAIRequest(input: AIInput): Promise<AIResponse> {
-  // Layer 1 — Rule engine always runs
+  console.log("\n🟣 PROCESSING AI REQUEST");
+  console.log("User message:", input.message);
+  
   const ruleResult = runRuleEngine(input);
-
-  // Layer 2 — Build controlled prompt
   const prompt = buildPrompt(input, ruleResult);
 
-  // Layer 3 — Call Gemini, fall back gracefully if it fails
   let aiText: string;
   let source: "gemini" | "fallback";
 
   try {
     aiText = await callGemini(prompt);
     source = "gemini";
+    console.log("✅ Gemini SUCCESS! Returning AI response of length:", aiText.length);
   } catch (err: any) {
-    console.error("Gemini API error FULL:", err?.message ?? err);
-
-    aiText = ruleResult.summary;
+    console.error("🔴 Gemini API error:", err?.message);
+    aiText = `Based on my analysis:\n\n${ruleResult.summary}`;
     if (ruleResult.riskFlags.length > 0) {
-      aiText +=
-        "\n\nAlerts:\n" + ruleResult.riskFlags.map((r) => `• ${r}`).join("\n");
+      aiText += "\n\n⚠️ Alerts:\n" + ruleResult.riskFlags.map(r => `• ${r}`).join("\n");
     }
     source = "fallback";
+    console.log("⚠️ Using FALLBACK response");
   }
 
+  console.log("📤 Returning response. Source:", source);
+  console.log("📤 Response preview:", aiText.substring(0, 150) + "...\n");
+  
   return { ruleResult, aiText, source };
 }

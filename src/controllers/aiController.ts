@@ -1,5 +1,3 @@
-// src/controllers/aiController.ts
-
 import { Response }    from 'express'
 import { AuthRequest } from '../middleware/auth'
 import prisma          from '../db/index'
@@ -103,6 +101,14 @@ export async function chat(req: AuthRequest, res: Response): Promise<void> {
     }
 
     const result = await processAIRequest(aiInput)
+
+    // DEBUG LOGGING
+    console.log("\n=== BACKEND RESPONSE DEBUG ===");
+    console.log("Source:", result.source);
+    console.log("AI Text length:", result.aiText.length);
+    console.log("AI Text preview (first 200 chars):", result.aiText.substring(0, 200));
+    console.log("Rule Summary:", result.ruleResult.summary);
+    console.log("===============================\n");
 
     res.status(200).json({
       aiText:     result.aiText,
