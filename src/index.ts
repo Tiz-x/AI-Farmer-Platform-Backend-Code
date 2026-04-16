@@ -7,6 +7,8 @@ import fieldRoutes from "./routes/fields";
 import alertRoutes from "./routes/alerts";
 import userRoutes from "./routes/users";
 import contentRoutes from "./routes/content";
+import listingRoutes from './routes/listings'
+import aiRoutes from "./routes/ai";
 
 dotenv.config();
 
@@ -47,6 +49,8 @@ app.use("/api/fields", fieldRoutes);
 app.use("/api/alerts", alertRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/content", contentRoutes);
+app.use("/api/ai", aiRoutes);
+app.use('/api/listings', listingRoutes)
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Route not found" });
@@ -69,5 +73,6 @@ app.use(
 app.listen(PORT, () => {
   console.log(`🌱 AgroFlow+ backend running on http://localhost:${PORT}`);
 });
+
 
 export default app;

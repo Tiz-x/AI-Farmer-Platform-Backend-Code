@@ -33,6 +33,31 @@ enum CropType {
   Pepper
 }
 
+enum ListingStatus {
+  available
+  partial
+  sold
+}
+
+enum DemandStatus {
+  pending
+  matched
+  expired
+}
+
+enum RequestStatus {
+  pending
+  accepted
+  rejected
+  completed
+}
+
+enum MatchStatus {
+  pending
+  confirmed
+  declined
+}
+
 model User {
   id        String   @id @default(cuid())
   name      String
@@ -60,23 +85,25 @@ model Farmer {
   updatedAt DateTime @updatedAt
 
   fields    Field[]
+  listings  Listing[]
+  matches   Match[]
 }
 
 model Field {
-  id              String    @id @default(cuid())
-  farmerId        String
-  farmer          Farmer    @relation(fields: [farmerId], references: [id], onDelete: Cascade)
-  location        String
-  crop            CropType
-  area            Float
-  ndvi            Float     @default(0)
-  soilMoisture    Float     @default(0)
-  lastIrrigation  DateTime?
-  status          Status    @default(active)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  farmerId       String
+  farmer         Farmer    @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  location       String
+  crop           CropType
+  area           Float
+  ndvi           Float     @default(0)
+  soilMoisture   Float     @default(0)
+  lastIrrigation DateTime?
+  status         Status    @default(active)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  alerts          Alert[]
+  alerts         Alert[]
 }
 
 model Buyer {
@@ -85,6 +112,10 @@ model Buyer {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  demands   Demand[]
+  requests  ListingRequest[]
+  matches   Match[]
 }
 
 model Seller {
@@ -93,6 +124,80 @@ model Seller {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  listings  Listing[]
+  matches   Match[]
+}
+
+model Listing {
+  id           String        @id @default(cuid()  )
+  sellerId     String
+  seller       Seller        @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  farmerId     String?
+  farmer       Farmer?       @relation(fields: [farmerId], references: [id])
+  cropType     CropType
+  quantity     Int
+  remainingQty Int
+  location     String
+  description  String
+  photoUrl     String?
+  status       ListingStatus @default(available)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  requests     ListingRequest[]
+  matches      Match[]
+}
+
+model Demand {
+  id        String       @id @default(cuid())
+  buyerId   String
+  buyer     Buyer        @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  cropType  CropType
+  quantity  Int
+  location  String
+  status    DemandStatus @default(pending)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  matches   Match[]
+}
+
+model ListingRequest {
+  id            String        @id @default(cuid())
+  listingId     String
+  listing       Listing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  buyerId       String
+  buyer         Buyer         @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  requestedQty  Int
+  message       String?
+  buyerLocation String        @default("")
+  status        RequestStatus @default(pending)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Match {
+  id             String      @id @default(cuid())
+  listingId      String
+  listing        Listing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  demandId       String?
+  demand         Demand?     @relation(fields: [demandId], references: [id])
+  requestId      String?
+  buyerId        String
+  buyer          Buyer       @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  sellerId       String
+  seller         Seller      @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  farmerId       String?
+  farmer         Farmer?     @relation(fields: [farmerId], references: [id])
+  cropType       CropType
+  quantity       Int
+  buyerLocation  String
+  sellerLocation String
+  distance       Float       @default(0)
+  status         MatchStatus @default(pending)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 }
 
 model Alert {
