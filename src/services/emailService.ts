@@ -86,19 +86,19 @@ export async function sendMatchEmailToBuyer(data: {
     <div class="card">
       <div class="card-row">
         <span class="card-label">Crop</span>
-        <span class="card-value">${data.cropType}</span>
+        <span class="card-value"> ${data.cropType}</span>
       </div>
       <div class="card-row">
         <span class="card-label">Quantity</span>
-        <span class="card-value">${data.quantity} kg</span>
+        <span class="card-value"> ${data.quantity} kg</span>
       </div>
       <div class="card-row">
         <span class="card-label">Seller Location</span>
-        <span class="card-value">📍 ${data.sellerLocation}, Akure</span>
+        <span class="card-value"> ${data.sellerLocation}, Akure</span>
       </div>
       <div class="card-row">
         <span class="card-label">Your Location</span>
-        <span class="card-value">📍 ${data.buyerLocation}, Akure</span>
+        <span class="card-value"> ${data.buyerLocation}, Akure</span>
       </div>
       <div class="card-row">
         <span class="card-label">Distance</span>

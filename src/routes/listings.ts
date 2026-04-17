@@ -627,5 +627,44 @@ router.get('/my/waitlist', protect, async (req: AuthRequest, res: Response) => {
   }
 })
 
+
+// ── DELETE A LISTING (seller only) ────────────────────────────────
+router.delete('/:listingId', protect, async (req: AuthRequest, res: Response) => {
+  try {
+    const listingId = getParam(req.params.listingId);
+    
+    // Get the listing with seller info
+    const listing = await prisma.listing.findUnique({
+      where: { id: listingId },
+      include: { seller: true }
+    });
+    
+    if (!listing) {
+      res.status(404).json({ error: 'Listing not found' });
+      return;
+    }
+    
+    // Check if the logged-in user owns this listing
+    const seller = await prisma.seller.findUnique({
+      where: { userId: req.user!.id }
+    });
+    
+    if (!seller || listing.sellerId !== seller.id) {
+      res.status(403).json({ error: 'You can only delete your own listings' });
+      return;
+    }
+    
+    // Delete the listing
+    await prisma.listing.delete({
+      where: { id: listingId }
+    });
+    
+    res.json({ message: 'Listing deleted successfully' });
+  } catch (error) {
+    console.error('Delete listing error:', error);
+    res.status(500).json({ error: 'Failed to delete listing' });
+  }
+});
+
 export { haversineDistance, AKURE_COORDS }
 export default router
