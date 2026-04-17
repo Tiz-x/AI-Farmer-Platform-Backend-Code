@@ -161,6 +161,8 @@ router.post('/', protect, async (req: AuthRequest, res: Response) => {
       },
     })
 
+    console.log('5. Listing created:', listing.id);
+
     // ── AUTO-MATCH: check waitlist for matching demands ──
     const matchingDemands = await prisma.demand.findMany({
       where: {
