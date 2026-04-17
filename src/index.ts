@@ -10,6 +10,7 @@ import contentRoutes from "./routes/content";
 import listingRoutes from './routes/listings'
 import aiRoutes from "./routes/ai";
 import chatRoutes from './routes/chat'
+import roleRoutes from './routes/role'
 
 dotenv.config();
 
@@ -53,6 +54,8 @@ app.use("/api/content", contentRoutes);
 app.use("/api/ai", aiRoutes);
 app.use('/api/listings', listingRoutes)
 app.use('/api/chat', chatRoutes)
+app.use('/api/role', roleRoutes)
+
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Route not found" });

@@ -1,4 +1,4 @@
-import { Router, Response } from 'express'
+import { Router, Response, Request } from 'express'
 import prisma from '../db/index'
 import { protect, AuthRequest } from '../middleware/auth'
 import {
@@ -44,6 +44,40 @@ function haversineDistance(loc1: string, loc2: string): number {
 // Helper to safely get param as string
 const getParam = (param: string | string[] | undefined): string => {
   return Array.isArray(param) ? param[0] : param || ''
+}
+
+// Helper to ensure seller profile exists
+async function ensureSellerProfile(userId: string) {
+  let seller = await prisma.seller.findUnique({
+    where: { userId },
+    include: { user: true },
+  })
+  
+  if (!seller) {
+    seller = await prisma.seller.create({
+      data: { userId },
+      include: { user: true },
+    })
+  }
+  
+  return seller
+}
+
+// Helper to ensure buyer profile exists
+async function ensureBuyerProfile(userId: string) {
+  let buyer = await prisma.buyer.findUnique({
+    where: { userId },
+    include: { user: true },
+  })
+  
+  if (!buyer) {
+    buyer = await prisma.buyer.create({
+      data: { userId },
+      include: { user: true },
+    })
+  }
+  
+  return buyer
 }
 
 // ── GET ALL LISTINGS ──────────────────────────────────
@@ -92,6 +126,16 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 })
 
+// ── TEST DATABASE ENDPOINT ──────────────────────────────────
+router.get('/test-db', async (req: Request, res: Response) => {
+  try {
+    const count = await prisma.listing.count()
+    res.json({ success: true, listingCount: count })
+  } catch (error: any) {
+    res.json({ success: false, error: error.message })
+  }
+})
+
 // ── POST A LISTING (seller) ──────────────────────────────────
 router.post('/', protect, async (req: AuthRequest, res: Response) => {
   try {
@@ -102,15 +146,7 @@ router.post('/', protect, async (req: AuthRequest, res: Response) => {
       return
     }
 
-    const seller = await prisma.seller.findUnique({
-      where:   { userId: req.user!.id },
-      include: { user: true },
-    })
-
-    if (!seller) {
-      res.status(403).json({ error: 'Only sellers can post listings' })
-      return
-    }
+    const seller = await ensureSellerProfile(req.user!.id)
 
     const listing = await prisma.listing.create({
       data: {
@@ -225,15 +261,7 @@ router.post('/demand', protect, async (req: AuthRequest, res: Response) => {
       return
     }
 
-    const buyer = await prisma.buyer.findUnique({
-      where:   { userId: req.user!.id },
-      include: { user: true },
-    })
-
-    if (!buyer) {
-      res.status(403).json({ error: 'Only buyers can post demands' })
-      return
-    }
+    const buyer = await ensureBuyerProfile(req.user!.id)
 
     const availableListings = await prisma.listing.findMany({
       where: {
@@ -359,15 +387,7 @@ router.post('/:listingId/request', protect, async (req: AuthRequest, res: Respon
     const listingId = getParam(req.params.listingId)
     const { quantity, message, buyerLocation } = req.body
 
-    const buyer = await prisma.buyer.findUnique({
-      where:   { userId: req.user!.id },
-      include: { user: true },
-    })
-
-    if (!buyer) {
-      res.status(403).json({ error: 'Only buyers can send requests' })
-      return
-    }
+    const buyer = await ensureBuyerProfile(req.user!.id)
 
     const listing = await prisma.listing.findUnique({
       where:   { id: listingId },
